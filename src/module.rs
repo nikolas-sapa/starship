@@ -347,11 +347,9 @@ mod tests {
             duration: Duration::default(),
         };
 
-        let rendered = nu_ansi_term::AnsiStrings(&module.ansi_strings_for_width(
-            Some(10),
-            Shell::Bash,
-        ))
-        .to_string();
+        let rendered =
+            nu_ansi_term::AnsiStrings(&module.ansi_strings_for_width(Some(10), Shell::Bash))
+                .to_string();
         assert_eq!(rendered, "\\$.......ab");
     }
 
@@ -369,11 +367,32 @@ mod tests {
             duration: Duration::default(),
         };
 
-        let rendered = nu_ansi_term::AnsiStrings(&module.ansi_strings_for_width(
-            Some(10),
-            Shell::Zsh,
-        ))
-        .to_string();
+        let rendered =
+            nu_ansi_term::AnsiStrings(&module.ansi_strings_for_width(Some(10), Shell::Zsh))
+                .to_string();
         assert_eq!(rendered, "%%.......ab");
+    }
+
+    #[test]
+    fn test_fill_reserves_tcsh_bang_escape() {
+        // `!` is stored bare for tcsh but printed as `\!`; fill must
+        // reserve 2 columns. `ansi_strings_for_width` itself still emits
+        // the bare `!` (escaping happens later in print::get_prompt).
+        // Regression test for https://github.com/starship/starship/issues/7744.
+        let mut segments = Segment::from_text(None, "!");
+        segments.push(Segment::fill(None, "."));
+        segments.extend(Segment::from_text(None, "ab"));
+        let module = Module {
+            config: None,
+            name: "unit_test".to_string(),
+            description: "This is a unit test".to_string(),
+            segments,
+            duration: Duration::default(),
+        };
+
+        let rendered =
+            nu_ansi_term::AnsiStrings(&module.ansi_strings_for_width(Some(10), Shell::Tcsh))
+                .to_string();
+        assert_eq!(rendered, "!......ab");
     }
 }

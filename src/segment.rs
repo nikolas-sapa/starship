@@ -190,9 +190,10 @@ impl Segment {
 }
 
 /// Width of `value` as rendered by `shell`, discounting escape sequences
-/// added by `shell_prompt_escape`.
+/// added by `shell_prompt_escape` (bash/zsh store escaped, render one) and
+/// accounting for escapes added at print time (tcsh `!` prints as `\!`).
 fn unescaped_width(value: &str, shell: Shell) -> usize {
-    if !value.contains(['$', '`', '\\', '%']) {
+    if !value.contains(['$', '`', '\\', '%', '!']) {
         return value.width_graphemes();
     }
     match shell {
@@ -204,6 +205,10 @@ fn unescaped_width(value: &str, shell: Shell) -> usize {
             .replace("\\\\", "\\")
             .width_graphemes(),
         Shell::Zsh => value.replace("%%", "%").width_graphemes(),
+        // Mirror of print::get_prompt tcsh escaping (`!` -> `\!` after
+        // measuring): escape for measurement so `$fill` reserves the extra
+        // column. Regression test for https://github.com/starship/starship/issues/7744.
+        Shell::Tcsh => value.replace('!', "\\!").width_graphemes(),
         _ => value.width_graphemes(),
     }
 }
@@ -245,6 +250,17 @@ mod unescaped_width_tests {
     fn plain_text_unaffected() {
         let seg = Segment::from_text(None, "user@machine".to_string()).remove(0);
         assert_eq!(seg.width_graphemes_shell(Shell::Bash), 12);
+    }
+
+    #[test]
+    fn tcsh_bang_counts_as_two() {
+        // `!` is stored bare (1 grapheme) but printed escaped as `\!`
+        // for tcsh, so fill must reserve 2. Other shells render it bare.
+        let seg = Segment::from_text(None, "!".to_string()).remove(0);
+        assert_eq!(seg.width_graphemes(), 1);
+        assert_eq!(seg.width_graphemes_shell(Shell::Tcsh), 2);
+        assert_eq!(seg.width_graphemes_shell(Shell::Bash), 1);
+        assert_eq!(seg.width_graphemes_shell(Shell::Unknown), 1);
     }
 }
 
